@@ -164,7 +164,7 @@ def speedtest():
 
         chars = string.ascii_lowercase + string.digits
         random.seed(988120)
-        test = [''.join(random.choice(chars) for _ in range(20)) for _ in range(1000)]
+        testSet = [''.join(random.choice(chars) for _ in range(20)) for _ in range(100000)]
         cacheBloom = CacheBloomFilter(2**20)
         regularBloom = BloomFilter(2**17)
         def insert(p):
@@ -172,7 +172,7 @@ def speedtest():
                 p.insert(i)
 
         def test(p):
-            for i in test:
+            for i in testSet:
                 p.test(i)
 
         t0 = time.time()
@@ -186,7 +186,19 @@ def speedtest():
         t1 = time.time()
         print("Regular inserting 100000 time: ")
         print(t1 - t0)
-        
+
+        t0 = time.time()
+        test(cacheBloom)
+        t1 = time.time()
+        print("Cache testing 100000 time: ")
+        print(t1 - t0)
+
+        t0 = time.time()
+        test(regularBloom)
+        t1 = time.time()
+        print("Regular testing 100000 time: ")
+        print(t1 - t0)
+
 if __name__ == '__main__':
     random.seed(98321)
     makeurlgraph()
