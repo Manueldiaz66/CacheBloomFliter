@@ -1,6 +1,8 @@
 import math
 import random
 import sys
+import time
+import timeit
 
 import numpy as np
 from bitarray import bitarray
@@ -36,7 +38,7 @@ class CacheBloomFilter:
     blockSize = 0
     chunkHashFunc = 0
 
-    def __init__(self, slotsNum, n = 5, cacheSize = 64):
+    def __init__(self, slotsNum, n = 2, cacheSize = 64):
         # figure size of cacheline
         self.blockSize = cacheSize * 8
         # figure out how many chunks you will have
@@ -156,8 +158,37 @@ def makeurlgraph():
 
     print(sys.getsizeof(test))
 
+def speedtest():
+        random.seed(98321)
+        membership = random.sample(list(urllist), 100000)
 
+        chars = string.ascii_lowercase + string.digits
+        random.seed(988120)
+        test = [''.join(random.choice(chars) for _ in range(20)) for _ in range(1000)]
+        cacheBloom = CacheBloomFilter(2**20)
+        regularBloom = BloomFilter(2**17)
+        def insert(p):
+            for i in membership:
+                p.insert(i)
+
+        def test(p):
+            for i in test:
+                p.test(i)
+
+        t0 = time.time()
+        insert(cacheBloom)
+        t1 = time.time()
+        print("Cache inserting 100000 time: ")
+        print(t1 - t0)
+
+        t0 = time.time()
+        insert(regularBloom)
+        t1 = time.time()
+        print("Regular inserting 100000 time: ")
+        print(t1 - t0)
+        
 if __name__ == '__main__':
     random.seed(98321)
     makeurlgraph()
+    speedtest()
     sys.exit()
