@@ -38,12 +38,12 @@ class CacheBloomFilter:
     blockSize = 0
     chunkHashFunc = 0
 
-    def __init__(self, slotsNum, n = 2, cacheSize = 64):
+    def __init__(self, slotsNum, n=2, cacheSize=64):
         # figure size of cacheline
         self.blockSize = cacheSize * 8
         # figure out how many chunks you will have
-        hashNum = int(slotsNum/self.blockSize)
-        #make empty bitmaps
+        hashNum = int(slotsNum / self.blockSize)
+        # make empty bitmaps
         for i in range(hashNum):
             hasharray = bitarray(self.blockSize)
             hasharray.setall(0)
@@ -74,6 +74,7 @@ class CacheBloomFilter:
     def getSize(self):
         return sys.getsizeof(self.hashArrays)
 
+
 class BloomFilter:
     hashFuncsNum = 0
     hashFuncs = []
@@ -82,7 +83,7 @@ class BloomFilter:
     blockSize = 0
     chunkHashFunc = 0
 
-    def __init__(self, slotsNum, n = 5):
+    def __init__(self, slotsNum, n=5):
         # figure size of cacheline
         # figure out how many chunks you will have
         self.hashArrays = bitarray(slotsNum)
@@ -110,7 +111,6 @@ class BloomFilter:
         return sys.getsizeof(self.hashArrays)
 
 
-
 def makeurlgraph():
     random.seed(98321)
     membership = random.sample(list(urllist), 1000)
@@ -123,84 +123,199 @@ def makeurlgraph():
     falsepositive1 = []
     falsepositive2 = []
 
-    def testBloomURL(size):
-        cacheBloom = CacheBloomFilter(size)
-        regularBloom = BloomFilter(size)
-        failurecount1 = 0
-        failurecount2 = 0
-        for i in membership:
-            cacheBloom.insert(i)
-            regularBloom.insert(i)
+    def testOldBloomURL(sizes):
+        results = []
+        for size in sizes:
+            regularBloom = BloomFilter(size)
+            failureCount1 = 0
+            for member in membership:
+             regularBloom.insert(member)
 
-        for i in test:
-            failurecount1 += cacheBloom.test(i)
-            failurecount2 += regularBloom.test(i)
+            for testValue in test:
+                failureCount1 += regularBloom.test(testValue)
 
-        return failurecount1 / 2000, failurecount2 / 2000, size
+            regularBloom = None
+            results.append(failureCount1/1000)
 
-    for i in range(9):
+        return results
 
-        results = testBloomURL(2**(10+i))
-        falsepositive1.append(results[0])
-        falsepositive2.append(results[1])
-        memorysize.append(results[2])
+    def testCacheBloomURL(sizes):
+        results = []
+        for size in sizes:
+            cacheBloom = CacheBloomFilter(size)
+            failureCount1 = 0
+            for member in membership:
+                cacheBloom.insert(member)
 
-    plt.plot(memorysize, falsepositive1, color='red', marker='o')
-    plt.plot(memorysize, falsepositive2, color='blue', marker='o')
-    plt.title('Memory Size vs False Positive Rate', fontsize=14)
+            for testValue in test:
+                failureCount1 += cacheBloom.test(testValue)
+
+            cacheBloom = None
+            results.append(failureCount1/1000)
+
+        return results
+
+    memorysize = [2 ** (10 + x) for x in range(9)]
+    falsepositive2 = testOldBloomURL(memorysize)
+    falsepositive1 = testCacheBloomURL(memorysize)
+
+    plt.plot(memorysize, falsepositive1, color='red', marker='o', label="cache")
+    plt.plot(memorysize, falsepositive2, color='blue', marker='o', label="regular")
+    plt.legend(loc="upper left")
+    plt.title('Memory Size vs False Positive Rate - Windows', fontsize=14)
     plt.xlabel('Memory Size', fontsize=14)
     plt.ylabel('False Positive Rate', fontsize=14)
     plt.show()
 
     test = {}
     for i in membership:
-        test.update({i : i})
+        test.update({i: i})
 
     print(sys.getsizeof(test))
 
+
+def speedgraph(oldVersion, newVersion, insertionSet, testSet, numberToTest):
+    def insert(p):
+        for i in insertionSet:
+            p.insert(i)
+
+    def test(p):
+        for i in testSet:
+            p.test(i)
+
+    t0 = time.time()
+    insert(oldVersion)
+    t1 = time.time()
+    oldInsertTime = t1 - t0
+
+    t0 = time.time()
+    test(oldVersion)
+    t1 = time.time()
+
+    oldTestTime = t1 - t0
+
+    t0 = time.time()
+    insert(oldVersion)
+    test(oldVersion)
+    t1 = time.time()
+    oldCombinedTime = t1 - t0
+
+    t0 = time.time()
+    insert(newVersion)
+    t1 = time.time()
+    newInsertTime = t1 - t0
+
+    t0 = time.time()
+    test(newVersion)
+    t1 = time.time()
+
+    newTestTime = t1 - t0
+
+    t0 = time.time()
+    insert(newVersion)
+    test(newVersion)
+    t1 = time.time()
+    newCombinedTime = t1 - t0
+
+    insertSpeedup = newInsertTime / oldInsertTime
+    testSpeedup = newTestTime / oldTestTime
+    combinedSpeedup = newCombinedTime / oldCombinedTime
+
+    return insertSpeedup, testSpeedup, combinedSpeedup
+
+
 def speedtest():
-        random.seed(98321)
-        membership = random.sample(list(urllist), 100000)
+    random.seed(98321)
+    membership = random.sample(list(urllist), 100000)
+
+    chars = string.ascii_lowercase + string.digits
+    random.seed(988120)
+    testSet = [''.join(random.choice(chars) for _ in range(20)) for _ in range(100000)]
+    cacheBloom = CacheBloomFilter(2 ** 20)
+    regularBloom = BloomFilter(2 ** 18)
+
+    def insert(p):
+        for i in membership:
+            p.insert(i)
+
+    def test(p):
+        for i in testSet:
+            p.test(i)
+
+    t0 = time.time()
+    insert(cacheBloom)
+    t1 = time.time()
+    print("Cache inserting 100000 time: ")
+    print(t1 - t0)
+
+    t0 = time.time()
+    insert(regularBloom)
+    t1 = time.time()
+    print("Regular inserting 100000 time: ")
+    print(t1 - t0)
+
+    t0 = time.time()
+    test(cacheBloom)
+    t1 = time.time()
+    print("Cache testing 100000 time: ")
+    print(t1 - t0)
+
+    t0 = time.time()
+    test(regularBloom)
+    t1 = time.time()
+    print("Regular testing 100000 time: ")
+    print(t1 - t0)
+
+    cacheBloom = CacheBloomFilter(2 ** 20)
+    regularBloom = BloomFilter(2 ** 18)
+
+    t0 = time.time()
+    insert(cacheBloom)
+    test(cacheBloom)
+    t1 = time.time()
+    print("Cache inserting and testing  100000 time: ")
+    print(t1 - t0)
+
+    t0 = time.time()
+    insert(regularBloom)
+    test(regularBloom)
+    t1 = time.time()
+    print("Regular inserting and testing  100000 time: ")
+    print(t1 - t0)
+
+
+def speedupGraph():
+    cacheBloom = CacheBloomFilter(2 ** 20)
+    regularBloom = BloomFilter(2 ** 18)
+    insertLine = []
+    testLine = []
+    combinedLine = []
+    xAxis = range(20000, 200000, 20000)
+    for x in range(20000, 200000, 20000):
+        print(x)
+        membership = random.sample(list(urllist), x)
 
         chars = string.ascii_lowercase + string.digits
         random.seed(988120)
-        testSet = [''.join(random.choice(chars) for _ in range(20)) for _ in range(100000)]
-        cacheBloom = CacheBloomFilter(2**20)
-        regularBloom = BloomFilter(2**17)
-        def insert(p):
-            for i in membership:
-                p.insert(i)
+        testSet = [''.join(random.choice(chars) for _ in range(20)) for _ in range(x)]
+        insert, test, combined = speedgraph(cacheBloom, regularBloom, membership, testSet, x)
+        insertLine.append(insert)
+        testLine.append(test)
+        combinedLine.append(combined)
 
-        def test(p):
-            for i in testSet:
-                p.test(i)
+    plt.plot(xAxis, insertLine, label="Insertion")
+    plt.plot(xAxis, testLine, label="Testing")
+    plt.plot(xAxis, combinedLine, label="Combined")
+    plt.legend(loc="upper left")
+    plt.title("Speedup of Cache Friendly BloomFilter", fontsize=14)
+    plt.xlabel("Amount of Items Tested", fontsize=14)
+    plt.ylabel('Speedup', fontsize=14)
+    plt.show()
 
-        t0 = time.time()
-        insert(cacheBloom)
-        t1 = time.time()
-        print("Cache inserting 100000 time: ")
-        print(t1 - t0)
-
-        t0 = time.time()
-        insert(regularBloom)
-        t1 = time.time()
-        print("Regular inserting 100000 time: ")
-        print(t1 - t0)
-
-        t0 = time.time()
-        test(cacheBloom)
-        t1 = time.time()
-        print("Cache testing 100000 time: ")
-        print(t1 - t0)
-
-        t0 = time.time()
-        test(regularBloom)
-        t1 = time.time()
-        print("Regular testing 100000 time: ")
-        print(t1 - t0)
 
 if __name__ == '__main__':
     random.seed(98321)
     makeurlgraph()
     speedtest()
+    speedupGraph();
     sys.exit()
